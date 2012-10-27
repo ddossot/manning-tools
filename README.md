@@ -8,7 +8,7 @@ Outputs relative paths for `codelink`'s `file` attributes.
 
 Usage:
 
-    lein run -m manning-tools.pathfinder /path/to/docbook.xml /path/to/src
+    lein run -m manning-tools.pathfinder -d /path/to/docbook.xml -s /path/to/src
 
 ## License
 

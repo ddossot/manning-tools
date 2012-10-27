@@ -5,11 +5,13 @@
          '[clojure.string :as string]
          '[clojure.java.io :as io])
 
-(def ^:const source-code-file-pattern #".*\.(clj|java|rb|erl|txt|xml|xsl|html)")
+(use '[clojure.tools.cli :only [cli]])
+
+(defonce ^:const source-code-file-pattern #".*\.(clj|java|rb|erl|txt|xml|xsl|html)")
 
 (defn walk [dirpath pattern]
-  (doall (filter #(re-matches pattern (.getName %))
-                 (file-seq (io/file dirpath)))))
+  (filter #(re-matches pattern (.getName %))
+            (file-seq (io/file dirpath))))
 
 (defn add-snippet-match-to-set [id-set line]
   (if-let [matches (re-find #"<start\s+id=\"([^\"]+)\"" line)]
@@ -27,7 +29,7 @@
       (reduce #(assoc %1 %2 code-file-path) code-map snippet-ids))))
 
 (defn walk-source-code [code-directory-path]
-  (reduce #(add-snippets-to-code-map %1 (.getPath %2)) {} (walk code-directory-path source-code-file-pattern)))
+  (reduce add-snippets-to-code-map {} (map #(.getPath %) (walk code-directory-path source-code-file-pattern))))
 
 (defn add-codelink-to-set [linkend-set element]
   (if (= :codelink (:tag element))
@@ -41,16 +43,32 @@
   (let [docbook-dir-path (.getParent (io/file docbook-file-path))]
     (.substring (string/replace source-code-file-path docbook-dir-path "") 1)))
 
-(defn -main
-  [& args]
-  (let [docbook-file-path (first args)
-        codelinks (fetch-codelinks docbook-file-path)
-        code-map  (walk-source-code (second args))]
+(defn suggest-file-links [docbook-file-path, code-directory-path]
+  (let [codelinks (fetch-codelinks docbook-file-path)
+        code-map  (walk-source-code code-directory-path)]
     (doseq [codelink codelinks]
       (let [codelink-attrs   (:attrs codelink)
             codelink-linkend (:linkend codelink-attrs)]
         (if (nil? (:file codelink-attrs))
-          (println "Missing file attribute for:" codelink-linkend "is:" (relativize-path docbook-file-path (code-map codelink-linkend)))
-          ; TODO also output linkends mismatches
+          (println "Missing file attribute for:"
+                     codelink-linkend
+                     "is:"
+                     (relativize-path docbook-file-path (code-map codelink-linkend)))
           )))))
+
+(defn parse-cli [args]
+  (cli args
+    ["-d" "--docbook" "Full path to the DocBook XML file"] 
+    ["-s" "--source" "Full path to the source code root directory (or chapter specific directory)"]))
+
+(defn -main
+  [& args]
+  (let [cli-args-meta (parse-cli args),
+        cli-args (first cli-args-meta)
+        docbook-file-path (:docbook cli-args),
+        code-directory-path (:source cli-args)]
+    (if (or (nil? docbook-file-path) (nil? code-directory-path))
+      (println (last cli-args-meta))
+      (suggest-file-links docbook-file-path code-directory-path))))
+      ; TODO also output linkends mismatches
 
